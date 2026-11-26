@@ -180,6 +180,18 @@ public class BlockFinderConfig {
 		return map;
 	}
 
+	/** Получить цвет для конкретного блока (или общий). */
+	public int rgbFor(String blockId) {
+		String custom = blockColors.get(blockId);
+		if (custom != null) {
+			int c = parseColor(custom);
+			if (c >= 0) {
+				return c;
+			}
+		}
+		return Math.max(0, parseColor(color));
+	}
+
 	public static String formatColor(int rgb) {
 		return String.format("#%06X", rgb & 0xFFFFFF);
 	}

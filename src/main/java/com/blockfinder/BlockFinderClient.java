@@ -120,10 +120,4 @@ public class BlockFinderClient implements ClientModInitializer {
 			y += lineHeight;
 		}
 	}
-
-	private static void status(Minecraft client, String text) {
-		if (client.player != null) {
-			client.player.displayClientMessage(Component.literal("[BlockFinder] " + text), true);
-		}
-	}
 }

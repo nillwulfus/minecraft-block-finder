@@ -160,7 +160,7 @@ public final class BlockFinderCommands {
 
 	private static void listCoords(FabricClientCommandSource source) {
 		Minecraft mc = Minecraft.getInstance();
-		List<BlockPos> list = BlockScanner.results();
+		List<BlockScanner.Hit> list = BlockScanner.results();
 		if (list.isEmpty() || mc.player == null || mc.level == null) {
 			msg(source, "Ничего не найдено в радиусе " + BlockFinderClient.config().radius + " блоков.");
 			return;
@@ -168,10 +168,11 @@ public final class BlockFinderCommands {
 		BlockPos me = mc.player.blockPosition();
 		msg(source, "Найдено: " + list.size() + " (показаны ближайшие 20)");
 		int shown = 0;
-		for (BlockPos p : list) {
+		for (BlockScanner.Hit hit : list) {
 			if (shown++ >= 20) {
 				break;
 			}
+			BlockPos p = hit.pos();
 			Block block = mc.level.getBlockState(p).getBlock();
 			int dist = (int) Math.round(Math.sqrt(p.distSqr(me)));
 			source.sendFeedback(Component.literal(

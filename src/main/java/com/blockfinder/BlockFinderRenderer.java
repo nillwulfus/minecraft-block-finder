@@ -46,7 +46,7 @@ public final class BlockFinderRenderer {
 					.withDepthTestFunction(DepthTestFunction.NO_DEPTH_TEST)
 					.build());
 
-	private static final RenderPipeline WITH_DEPTH = RenderPipelines.register(
+	public static final RenderPipeline WITH_DEPTH = RenderPipelines.register(
 			RenderPipeline.builder(RenderPipelines.DEBUG_FILLED_SNIPPET)
 					.withLocation(Identifier.fromNamespaceAndPath(ID, "pipeline/filled_with_depth"))
 					.build());
@@ -76,17 +76,17 @@ public final class BlockFinderRenderer {
 	}
 
 	/** Начать набор прямоугольников для конвейера. */
-	static void begin(RenderPipeline pipeline) {
+	public static void begin(RenderPipeline pipeline) {
 		buffer = new BufferBuilder(ALLOCATOR, pipeline.getVertexFormatMode(), pipeline.getVertexFormat());
 		vertexCount = 0;
 	}
 
-	static BufferBuilder buffer() {
+	public static BufferBuilder buffer() {
 		return buffer;
 	}
 
 	/** Отправить набранное на экран. */
-	static void finish(RenderPipeline pipeline) {
+	public static void finish(RenderPipeline pipeline) {
 		if (vertexCount == 0) {
 			buffer = null;
 			return;
@@ -139,7 +139,7 @@ public final class BlockFinderRenderer {
 	}
 
 	/** Куб с центром (cx,cy,cz) и полуразмерами (hx,hy,hz). */
-	static void cube(PoseStack matrices, BufferBuilder buf, float cx, float cy, float cz,
+	public static void cube(PoseStack matrices, BufferBuilder buf, float cx, float cy, float cz,
 			float hx, float hy, float hz, int rgb, float a) {
 		float r = ((rgb >> 16) & 0xFF) / 255f;
 		float g = ((rgb >> 8) & 0xFF) / 255f;
@@ -169,7 +169,7 @@ public final class BlockFinderRenderer {
 	}
 
 	/** Залитый бокс с затемнением на нижних гранях. */
-	static void shadedBox(Matrix4fc m, BufferBuilder buf,
+	public static void shadedBox(Matrix4fc m, BufferBuilder buf,
 			float minX, float minY, float minZ, float maxX, float maxY, float maxZ,
 			float red, float green, float blue, float alpha) {
 		vertexCount += 24;

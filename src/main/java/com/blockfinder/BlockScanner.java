@@ -3,31 +3,39 @@ package com.blockfinder;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Ищет нужные блоки вокруг игрока среди загруженных клиентом чанков.
  * Секции чанков, в которых нужных блоков точно нет, пропускаются целиком.
  */
 public final class BlockScanner {
+	/** Найденный блок: позиция и цвет подсветки (0xRRGGBB). */
+	public record Hit(BlockPos pos, int rgb) {
+	}
+
 	private static final int SCAN_INTERVAL_TICKS = 20;
 	private static final int HARD_LIMIT = 20000;
 
-	private static volatile List<BlockPos> results = List.of();
+	private static volatile List<Hit> results = List.of();
 	private static int cooldown = 0;
+	private static boolean hadResults = false;
 
 	private BlockScanner() {
 	}
 
-	public static List<BlockPos> results() {
+	public static List<Hit> results() {
 		return results;
 	}
 
@@ -40,6 +48,7 @@ public final class BlockScanner {
 		if (!cfg.enabled || mc.level == null || mc.player == null) {
 			results = List.of();
 			cooldown = 0;
+			hadResults = false;
 			return;
 		}
 		if (--cooldown > 0) {
@@ -50,9 +59,10 @@ public final class BlockScanner {
 	}
 
 	private static void scan(Minecraft mc, BlockFinderConfig cfg) {
-		Set<Block> targets = cfg.targetBlocks();
-		if (targets.isEmpty()) {
+		Map<Block, Integer> colors = cfg.targetColors();
+		if (colors.isEmpty()) {
 			results = List.of();
+			hadResults = false;
 			return;
 		}
 
@@ -69,7 +79,7 @@ public final class BlockScanner {
 		int minCZ = (oz - r) >> 4;
 		int maxCZ = (oz + r) >> 4;
 
-		List<BlockPos> found = new ArrayList<>();
+		List<Hit> found = new ArrayList<>();
 
 		outer:
 		for (int cx = minCX; cx <= maxCX; cx++) {
@@ -90,7 +100,7 @@ public final class BlockScanner {
 					if (baseY + 15 < oy - r || baseY > oy + r) {
 						continue;
 					}
-					if (!section.maybeHas(state -> targets.contains(state.getBlock()))) {
+					if (!section.maybeHas(state -> colors.containsKey(state.getBlock()))) {
 						continue;
 					}
 
@@ -98,7 +108,8 @@ public final class BlockScanner {
 						for (int z = 0; z < 16; z++) {
 							for (int x = 0; x < 16; x++) {
 								BlockState state = section.getBlockState(x, y, z);
-								if (!targets.contains(state.getBlock())) {
+								Integer color = colors.get(state.getBlock());
+								if (color == null) {
 									continue;
 								}
 								int wx = (cx << 4) + x;
@@ -110,7 +121,7 @@ public final class BlockScanner {
 								if (dx * dx + dy * dy + dz * dz > r2) {
 									continue;
 								}
-								found.add(new BlockPos(wx, wy, wz));
+								found.add(new Hit(new BlockPos(wx, wy, wz), color));
 								if (found.size() >= HARD_LIMIT) {
 									break outer;
 								}
@@ -121,10 +132,19 @@ public final class BlockScanner {
 			}
 		}
 
-		found.sort(Comparator.comparingDouble(p -> p.distSqr(origin)));
+		found.sort(Comparator.comparingDouble(h -> h.pos().distSqr(origin)));
 		if (found.size() > cfg.maxBlocks) {
 			found = new ArrayList<>(found.subList(0, cfg.maxBlocks));
 		}
+
+		boolean hasResults = !found.isEmpty();
+		if (hasResults && !hadResults && cfg.soundEnabled) {
+			mc.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.EXPERIENCE_ORB_PICKUP, 1.2f));
+			if (mc.player != null) {
+				mc.player.displayClientMessage(Component.literal("§aНайдено блоков: " + found.size()), true);
+			}
+		}
+		hadResults = hasResults;
 		results = List.copyOf(found);
 	}
 }

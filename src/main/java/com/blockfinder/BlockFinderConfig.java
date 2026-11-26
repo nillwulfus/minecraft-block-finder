@@ -45,6 +45,12 @@ public class BlockFinderConfig {
 	public int opacity = 40;
 	/** Сколько ближайших блоков показывать на экране. */
 	public int hudLines = 5;
+	/** Режим отображения: 0=заливка, 1=контур, 2=оба. */
+	public int renderMode = 0;
+	/** Звук при нахождении блоков. */
+	public boolean soundEnabled = true;
+	/** Цвета для отдельных блоков (id -> #RRGGBB). */
+	public java.util.Map<String, String> blockColors = new java.util.HashMap<>();
 
 	public static BlockFinderConfig load() {
 		BlockFinderConfig cfg = null;
@@ -154,5 +160,27 @@ public class BlockFinderConfig {
 			}
 		}
 		return set;
+	}
+
+	/** Карта блок -> цвет для рендеринга. */
+	public java.util.Map<Block, Integer> targetColors() {
+		java.util.Map<Block, Integer> map = new java.util.LinkedHashMap<>();
+		int defaultColor = parseColor(color);
+		for (String s : blocks) {
+			String normalized = normalizeBlockId(s);
+			if (normalized != null) {
+				Optional<Block> block = BuiltInRegistries.BLOCK.getOptional(Identifier.tryParse(normalized));
+				if (block.isPresent()) {
+					String custom = blockColors.get(normalized);
+					int rgb = custom != null ? parseColor(custom) : -1;
+					map.put(block.get(), rgb >= 0 ? rgb : defaultColor);
+				}
+			}
+		}
+		return map;
+	}
+
+	public static String formatColor(int rgb) {
+		return String.format("#%06X", rgb & 0xFFFFFF);
 	}
 }

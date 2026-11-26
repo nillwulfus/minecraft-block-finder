@@ -62,84 +62,150 @@ public final class BlockFinderRenderer {
 	private BlockFinderRenderer() {
 	}
 
+	private static int vertexCount;
+
 	/** Вызывается из WorldRenderEvents.BEFORE_TRANSLUCENT. */
 	public static void render(WorldRenderContext context) {
+		PoseStack matrices = context.matrices();
+		Vec3 camera = context.worldState().cameraRenderState.pos;
+		renderHighlights(matrices, camera);
+		com.blockfinder.effects.TrailEffect.render(matrices, camera);
+		DeathEffects.render(matrices, camera);
+		Accessories.render(matrices, camera);
+		Waypoints.render(matrices, camera);
+	}
+
+	/** Начать набор прямоугольников для конвейера. */
+	static void begin(RenderPipeline pipeline) {
+		buffer = new BufferBuilder(ALLOCATOR, pipeline.getVertexFormatMode(), pipeline.getVertexFormat());
+		vertexCount = 0;
+	}
+
+	static BufferBuilder buffer() {
+		return buffer;
+	}
+
+	/** Отправить набранное на экран. */
+	static void finish(RenderPipeline pipeline) {
+		if (vertexCount == 0) {
+			buffer = null;
+			return;
+		}
+		drawBuffer(Minecraft.getInstance(), pipeline);
+	}
+
+	private static void renderHighlights(PoseStack matrices, Vec3 camera) {
 		BlockFinderConfig cfg = BlockFinderClient.config();
 		if (!cfg.enabled) {
 			return;
 		}
-		List<BlockPos> positions = BlockScanner.results();
-		if (positions.isEmpty()) {
+		List<BlockScanner.Hit> hits = BlockScanner.results();
+		if (hits.isEmpty()) {
 			return;
 		}
 
 		RenderPipeline pipeline = cfg.throughWalls ? THROUGH_WALLS : WITH_DEPTH;
-		// Чуть больше блока, чтобы грани не мерцали на стыке с поверхностью (актуально для режима с глубиной)
 		float grow = cfg.throughWalls ? 0.0f : 0.002f;
-
-		PoseStack matrices = context.matrices();
-		Vec3 camera = context.worldState().cameraRenderState.pos;
 
 		matrices.pushPose();
 		matrices.translate(-camera.x, -camera.y, -camera.z);
 
-		buffer = new BufferBuilder(ALLOCATOR, pipeline.getVertexFormatMode(), pipeline.getVertexFormat());
-		float r = cfg.red();
-		float g = cfg.green();
-		float b = cfg.blue();
+		begin(pipeline);
 		float a = cfg.alpha();
+		int mode = cfg.renderMode;
 
-		for (BlockPos pos : positions) {
-			filledBox(matrices.last().pose(), buffer,
-					pos.getX() - grow, pos.getY() - grow, pos.getZ() - grow,
-					pos.getX() + 1 + grow, pos.getY() + 1 + grow, pos.getZ() + 1 + grow,
-					r, g, b, a);
+		for (BlockScanner.Hit hit : hits) {
+			BlockPos pos = hit.pos();
+			float r = ((hit.rgb() >> 16) & 0xFF) / 255f;
+			float g = ((hit.rgb() >> 8) & 0xFF) / 255f;
+			float b = (hit.rgb() & 0xFF) / 255f;
+			float x1 = pos.getX() - grow;
+			float y1 = pos.getY() - grow;
+			float z1 = pos.getZ() - grow;
+			float x2 = pos.getX() + 1 + grow;
+			float y2 = pos.getY() + 1 + grow;
+			float z2 = pos.getZ() + 1 + grow;
+
+			if (mode == 0 || mode == 2) {
+				shadedBox(matrices.last().pose(), buffer, x1, y1, z1, x2, y2, z2, r, g, b, a);
+			}
+			if (mode == 1 || mode == 2) {
+				edges(matrices.last().pose(), buffer, x1, y1, z1, x2, y2, z2, 0.03f, r, g, b, Math.min(1f, a * 1.5f));
+			}
 		}
 
 		matrices.popPose();
-
-		drawBuffer(Minecraft.getInstance(), pipeline);
+		finish(pipeline);
 	}
 
-	private static void filledBox(Matrix4fc m, BufferBuilder buf,
+	/** Куб с центром (cx,cy,cz) и полуразмерами (hx,hy,hz). */
+	static void cube(PoseStack matrices, BufferBuilder buf, float cx, float cy, float cz,
+			float hx, float hy, float hz, int rgb, float a) {
+		float r = ((rgb >> 16) & 0xFF) / 255f;
+		float g = ((rgb >> 8) & 0xFF) / 255f;
+		float b = (rgb & 0xFF) / 255f;
+		shadedBox(matrices.last().pose(), buf, cx - hx, cy - hy, cz - hz, cx + hx, cy + hy, cz + hz, r, g, b, a);
+	}
+
+	/** Контур куба: 12 тонких параллелепипедов вдоль рёбер. */
+	private static void edges(Matrix4fc m, BufferBuilder buf,
+			float x1, float y1, float z1, float x2, float y2, float z2, float t,
+			float r, float g, float b, float a) {
+		// вдоль X
+		shadedBox(m, buf, x1, y1 - t, z1 - t, x2, y1 + t, z1 + t, r, g, b, a);
+		shadedBox(m, buf, x1, y2 - t, z1 - t, x2, y2 + t, z1 + t, r, g, b, a);
+		shadedBox(m, buf, x1, y1 - t, z2 - t, x2, y1 + t, z2 + t, r, g, b, a);
+		shadedBox(m, buf, x1, y2 - t, z2 - t, x2, y2 + t, z2 + t, r, g, b, a);
+		// вдоль Y
+		shadedBox(m, buf, x1 - t, y1, z1 - t, x1 + t, y2, z1 + t, r, g, b, a);
+		shadedBox(m, buf, x2 - t, y1, z1 - t, x2 + t, y2, z1 + t, r, g, b, a);
+		shadedBox(m, buf, x1 - t, y1, z2 - t, x1 + t, y2, z2 + t, r, g, b, a);
+		shadedBox(m, buf, x2 - t, y1, z2 - t, x2 + t, y2, z2 + t, r, g, b, a);
+		// вдоль Z
+		shadedBox(m, buf, x1 - t, y1 - t, z1, x1 + t, y1 + t, z2, r, g, b, a);
+		shadedBox(m, buf, x2 - t, y1 - t, z1, x2 + t, y1 + t, z2, r, g, b, a);
+		shadedBox(m, buf, x1 - t, y2 - t, z1, x1 + t, y2 + t, z2, r, g, b, a);
+		shadedBox(m, buf, x2 - t, y2 - t, z1, x2 + t, y2 + t, z2, r, g, b, a);
+	}
+
+	/** Залитый бокс с затемнением на нижних гранях. */
+	static void shadedBox(Matrix4fc m, BufferBuilder buf,
 			float minX, float minY, float minZ, float maxX, float maxY, float maxZ,
 			float red, float green, float blue, float alpha) {
+		vertexCount += 24;
+		float s = 0.75f;
 		// Front
-		buf.addVertex(m, minX, minY, maxZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, maxX, minY, maxZ).setColor(red, green, blue, alpha);
+		buf.addVertex(m, minX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, maxX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
 		buf.addVertex(m, maxX, maxY, maxZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, minX, maxY, maxZ).setColor(red, green, blue, alpha);
-
 		// Back
-		buf.addVertex(m, maxX, minY, minZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, minX, minY, minZ).setColor(red, green, blue, alpha);
+		buf.addVertex(m, maxX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, minX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
 		buf.addVertex(m, minX, maxY, minZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, maxX, maxY, minZ).setColor(red, green, blue, alpha);
-
 		// Left
-		buf.addVertex(m, minX, minY, minZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, minX, minY, maxZ).setColor(red, green, blue, alpha);
+		buf.addVertex(m, minX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, minX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
 		buf.addVertex(m, minX, maxY, maxZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, minX, maxY, minZ).setColor(red, green, blue, alpha);
-
 		// Right
-		buf.addVertex(m, maxX, minY, maxZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, maxX, minY, minZ).setColor(red, green, blue, alpha);
+		buf.addVertex(m, maxX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, maxX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
 		buf.addVertex(m, maxX, maxY, minZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, maxX, maxY, maxZ).setColor(red, green, blue, alpha);
-
 		// Top
 		buf.addVertex(m, minX, maxY, maxZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, maxX, maxY, maxZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, maxX, maxY, minZ).setColor(red, green, blue, alpha);
 		buf.addVertex(m, minX, maxY, minZ).setColor(red, green, blue, alpha);
-
 		// Bottom
-		buf.addVertex(m, minX, minY, minZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, maxX, minY, minZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, maxX, minY, maxZ).setColor(red, green, blue, alpha);
-		buf.addVertex(m, minX, minY, maxZ).setColor(red, green, blue, alpha);
+		buf.addVertex(m, minX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, maxX, minY, minZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, maxX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
+		buf.addVertex(m, minX, minY, maxZ).setColor(red * s, green * s, blue * s, alpha);
 	}
+
 
 	private static void drawBuffer(Minecraft client, RenderPipeline pipeline) {
 		MeshData built = buffer.buildOrThrow();

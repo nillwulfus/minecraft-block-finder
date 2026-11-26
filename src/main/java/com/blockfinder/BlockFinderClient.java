@@ -76,6 +76,8 @@ public class BlockFinderClient implements ClientModInitializer {
 
 		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
 				Identifier.fromNamespaceAndPath(MOD_ID, "coords"), BlockFinderClient::renderHud);
+		HudElementRegistry.attachElementBefore(VanillaHudElements.CHAT,
+				Identifier.fromNamespaceAndPath(MOD_ID, "waypoints"), Waypoints::renderHud);
 
 		ClientCommandRegistrationCallback.EVENT.register(BlockFinderCommands::register);
 	}
@@ -91,7 +93,7 @@ public class BlockFinderClient implements ClientModInitializer {
 		if (!config.enabled || !config.showHud || mc.player == null || mc.level == null || mc.options.hideGui) {
 			return;
 		}
-		List<BlockPos> list = BlockScanner.results();
+		List<BlockScanner.Hit> list = BlockScanner.results();
 		int x = 6;
 		int y = 6;
 		int lineHeight = mc.font.lineHeight + 2;
@@ -105,16 +107,23 @@ public class BlockFinderClient implements ClientModInitializer {
 		y += lineHeight;
 
 		BlockPos me = mc.player.blockPosition();
-		int color = 0xFF000000 | (BlockFinderConfig.parseColor(config.color) & 0xFFFFFF);
 		int n = Math.min(config.hudLines, list.size());
 		for (int i = 0; i < n; i++) {
-			BlockPos p = list.get(i);
+			BlockScanner.Hit hit = list.get(i);
+			BlockPos p = hit.pos();
 			int dist = (int) Math.round(Math.sqrt(p.distSqr(me)));
 			String name = mc.level.getBlockState(p).getBlock().getName().getString();
+			int color = 0xFF000000 | (hit.rgb() & 0xFFFFFF);
 			graphics.drawString(mc.font,
 					name + "  " + p.getX() + " " + p.getY() + " " + p.getZ() + "  (" + dist + " м)",
 					x, y, color);
 			y += lineHeight;
+		}
+	}
+
+	private static void status(Minecraft client, String text) {
+		if (client.player != null) {
+			client.player.displayClientMessage(Component.literal("[BlockFinder] " + text), true);
 		}
 	}
 }

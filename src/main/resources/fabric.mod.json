@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "blockfinder",
+  "version": "${version}",
+  "name": "Block Finder",
+  "description": "Ищет нужные блоки рядом с игроком, подсвечивает их (в том числе сквозь стены) и показывает координаты.",
+  "authors": ["you"],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.blockfinder.BlockFinderClient"]
+  },
+  "mixins": ["blockfinder.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
